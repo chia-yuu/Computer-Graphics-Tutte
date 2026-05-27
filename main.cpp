@@ -6,6 +6,8 @@
 #include <map>
 #include <string>
 #include <fstream>
+#include <vector>
+#include <set>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -201,9 +203,9 @@ public:
 			}
 		}
 	}
-	
 
-    void Tutte() {
+
+	void Tutte() {
 		
 		
 		uvs.resize(vertices.size());
@@ -212,10 +214,107 @@ public:
 		// locate boundary vertices
 		// put them on a unit circle within [0,1]^2
 		// then iterate : for each interior vertices, set their parameterization to be the average of their neighbor's parameterization.
-		
-		
+
+		int n = vertices.size();
+
+		std::vector<std::set<int>> adjlist(n);
+		std::map<std::pair<int, int>, int> edge_cnt;
+		for(const auto& tri : indices){
+			for(int e = 0;e < 3;e++){
+				int a = tri.vtx[e];
+				int b = tri.vtx[(e+1) % 3];
+				adjlist[a].insert(b);
+				adjlist[b].insert(a);
+
+				if (a > b){
+					std::swap(a, b);
+				}
+				edge_cnt[{a, b}]++;
+			}
+		}
+
+		std::map<int, std::vector<int>> boundary_adjlist;
+		for(auto& kv : edge_cnt){
+			if(kv.second == 1){
+				int a = kv.first.first;
+				int b = kv.first.second;
+				boundary_adjlist[a].push_back(b);
+				boundary_adjlist[b].push_back(a);
+			}
+		}
+
+
+		std::vector<int> boundary;
+		if (boundary_adjlist.empty()) return;
+
+		int start = -1;
+		for(auto& kv : boundary_adjlist){
+			if (kv.second.size() == 2){
+				start = kv.first;
+				break;
+			}
+		}
+
+		if(start == -1) return;
+
+		boundary.push_back(start);
+
+		int prev = -1;
+		int current = start;
+
+		while(true){
+			const auto& neighbor = boundary_adjlist[current];
+			int next = -1;
+			for(int v : neighbor){
+				if(v != prev){
+					next = v;
+					break;
+				}
+			}
+
+			if(next == -1 || next == start){
+				break;
+			}
+
+			boundary.push_back(next);
+			prev = current;
+			current = next;
+		}
+
+		std::vector<bool> is_boundary(n, false);
+
+		int m = boundary.size();
+
+		for(int i = 0; i < m; i++){
+			double theta = 2.0 * M_PI * i / m;
+			double x = 0.5 + 0.5 * cos(theta);
+			double y = 0.5 + 0.5 * sin(theta);
+
+			uvs[boundary[i]] = Vector(x, y, 0);
+			is_boundary[boundary[i]] = true;
+		}
+
+		for(int i = 0; i < n; i++){
+			if(!is_boundary[i]){
+				uvs[i] = Vector(0.5, 0.5, 0);
+			}
+		}
+
+		const int iterations = 10000;
+		std::vector<Vector> newUVs = uvs;
+		for(int it = 0;it<iterations;it++){
+			for(int i=0;i<n;i++){
+				if(is_boundary[i]){continue;}
+				Vector sum(0, 0, 0);
+				for(int j : adjlist[i]){
+					sum = sum + uvs[j];
+				}
+				newUVs[i] = sum / (double)adjlist[i].size();
+			}
+			uvs.swap(newUVs);
+		}
 	}
-	
+
 
 	void save_image(std::string filename) {
 		constexpr int W = 800, H = 800;
